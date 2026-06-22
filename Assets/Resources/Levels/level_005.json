@@ -1,0 +1,18 @@
+{
+  "levelId": 5,
+  "rows": 10,
+  "columns": 5,
+  "lives": 5,
+  "arrows": [
+    { "row": 0, "column": 1, "direction": "Down" },
+    { "row": 0, "column": 3, "direction": "Down" },
+    { "row": 2, "column": 0, "direction": "Down" },
+    { "row": 2, "column": 3, "direction": "Left" },
+    { "row": 3, "column": 2, "direction": "Up" },
+    { "row": 3, "column": 3, "direction": "Left" },
+    { "row": 5, "column": 1, "direction": "Right" },
+    { "row": 5, "column": 2, "direction": "Right" },
+    { "row": 7, "column": 2, "direction": "Up" },
+    { "row": 7, "column": 3, "direction": "Up" }
+  ]
+}
