@@ -28,7 +28,7 @@ public class BoardController : MonoBehaviour
     [SerializeField] private float doubleClickThreshold = 0.3f;
 
     private const float GameTopGuiHeight = 330f;
-    private const float EditorTopGuiHeight = 360f;
+    private const float EditorTopGuiHeight = 420f;
     private const float BoardTopMarginWorld = 0.25f;
 
     private ArrowView[,] grid;
@@ -43,6 +43,8 @@ public class BoardController : MonoBehaviour
     private TextAsset[] levelAssets;
     private ArrowView lastClickedEditorArrow;
     private float lastEditorClickTime;
+    private int selectedEditorLevelIndex;
+    private string selectedEditorLevelName = "No levels";
 
     private void Start()
     {
@@ -112,6 +114,9 @@ public class BoardController : MonoBehaviour
         {
             Debug.LogError("В папке Resources/Levels не найдено JSON-файлов уровней.");
         }
+
+        selectedEditorLevelIndex = Mathf.Clamp(selectedEditorLevelIndex, 0, Mathf.Max(0, levelAssets.Length - 1));
+        UpdateSelectedEditorLevelName();
     }
 
     private void TrySelectArrow(Vector2 screenPosition)
@@ -589,7 +594,15 @@ public class BoardController : MonoBehaviour
         isLevelCompleted = false;
         isAllLevelsCompleted = false;
 
-        RebuildEditorBoard();
+        if (levelAssets != null && levelAssets.Length > 0)
+        {
+            selectedEditorLevelIndex = Mathf.Clamp(currentLevelIndex, 0, levelAssets.Length - 1);
+            LoadSelectedEditorLevel();
+        }
+        else
+        {
+            RebuildEditorBoard();
+        }
 
         Debug.Log("Включен режим редактора уровня.");
     }
@@ -608,6 +621,94 @@ public class BoardController : MonoBehaviour
         GenerateLevel();
 
         Debug.Log("Выход из редактора уровня.");
+    }
+
+    private void SelectPreviousEditorLevel()
+    {
+        if (levelAssets == null || levelAssets.Length == 0)
+        {
+            return;
+        }
+
+        selectedEditorLevelIndex--;
+
+        if (selectedEditorLevelIndex < 0)
+        {
+            selectedEditorLevelIndex = levelAssets.Length - 1;
+        }
+
+        UpdateSelectedEditorLevelName();
+    }
+
+    private void SelectNextEditorLevel()
+    {
+        if (levelAssets == null || levelAssets.Length == 0)
+        {
+            return;
+        }
+
+        selectedEditorLevelIndex++;
+
+        if (selectedEditorLevelIndex >= levelAssets.Length)
+        {
+            selectedEditorLevelIndex = 0;
+        }
+
+        UpdateSelectedEditorLevelName();
+    }
+
+    private void UpdateSelectedEditorLevelName()
+    {
+        if (levelAssets == null || levelAssets.Length == 0)
+        {
+            selectedEditorLevelName = "No levels";
+            return;
+        }
+
+        selectedEditorLevelIndex = Mathf.Clamp(selectedEditorLevelIndex, 0, levelAssets.Length - 1);
+        selectedEditorLevelName = levelAssets[selectedEditorLevelIndex].name;
+    }
+
+    private void LoadSelectedEditorLevel()
+    {
+        if (levelAssets == null || levelAssets.Length == 0)
+        {
+            Debug.LogError("Нет доступных уровней для загрузки в редактор.");
+            RebuildEditorBoard();
+            return;
+        }
+
+        selectedEditorLevelIndex = Mathf.Clamp(selectedEditorLevelIndex, 0, levelAssets.Length - 1);
+        UpdateSelectedEditorLevelName();
+
+        LevelConfig levelConfig = LoadLevelConfig(selectedEditorLevelIndex);
+
+        if (levelConfig == null)
+        {
+            Debug.LogError($"Не удалось загрузить выбранный уровень в редактор: {selectedEditorLevelName}");
+            return;
+        }
+
+        ClearBoard();
+
+        editorLevelId = Mathf.Max(1, levelConfig.levelId);
+        editorRows = Mathf.Max(3, levelConfig.rows);
+        editorColumns = Mathf.Max(3, levelConfig.columns);
+        editorLives = Mathf.Max(1, levelConfig.lives);
+
+        rows = editorRows;
+        columns = editorColumns;
+        lives = editorLives;
+        arrowsLeft = 0;
+        grid = new ArrowView[rows, columns];
+        lastClickedEditorArrow = null;
+        lastEditorClickTime = 0f;
+
+        SetupCamera();
+        CreateCells();
+        CreateLevelArrows(levelConfig);
+
+        Debug.Log($"Уровень загружен в редактор: {selectedEditorLevelName}");
     }
 
     private void RebuildEditorBoard()
@@ -895,52 +996,68 @@ public class BoardController : MonoBehaviour
         hintStyle.normal.textColor = Color.white;
 
         GUI.Label(new Rect(30, 25, 500, 45), "EDITOR MODE", editorLabelStyle);
-        GUI.Label(new Rect(30, 75, 260, 45), $"Level ID: {editorLevelId}", editorLabelStyle);
-        GUI.Label(new Rect(30, 130, 260, 45), $"Rows: {editorRows}", editorLabelStyle);
-        GUI.Label(new Rect(30, 185, 260, 45), $"Columns: {editorColumns}", editorLabelStyle);
-        GUI.Label(new Rect(30, 240, 260, 45), $"Lives: {editorLives}", editorLabelStyle);
+        GUI.Label(new Rect(30, 70, 300, 45), $"Selected: {selectedEditorLevelName}", editorLabelStyle);
+        GUI.Label(new Rect(30, 125, 260, 45), $"Level ID: {editorLevelId}", editorLabelStyle);
+        GUI.Label(new Rect(30, 180, 260, 45), $"Rows: {editorRows}", editorLabelStyle);
+        GUI.Label(new Rect(30, 235, 260, 45), $"Columns: {editorColumns}", editorLabelStyle);
+        GUI.Label(new Rect(30, 290, 260, 45), $"Lives: {editorLives}", editorLabelStyle);
 
-        if (GUI.Button(new Rect(270, 75, 55, 45), "-", smallButtonStyle))
+        if (GUI.Button(new Rect(335, 70, 80, 45), "Prev", smallButtonStyle))
+        {
+            SelectPreviousEditorLevel();
+        }
+
+        if (GUI.Button(new Rect(425, 70, 80, 45), "Next", smallButtonStyle))
+        {
+            SelectNextEditorLevel();
+        }
+
+        if (GUI.Button(new Rect(515, 70, 90, 45), "Load", smallButtonStyle))
+        {
+            LoadSelectedEditorLevel();
+        }
+
+        if (GUI.Button(new Rect(270, 125, 55, 45), "-", smallButtonStyle))
         {
             editorLevelId = Mathf.Max(1, editorLevelId - 1);
         }
 
-        if (GUI.Button(new Rect(335, 75, 55, 45), "+", smallButtonStyle))
+        if (GUI.Button(new Rect(335, 125, 55, 45), "+", smallButtonStyle))
         {
             editorLevelId++;
         }
 
-        if (GUI.Button(new Rect(270, 130, 55, 45), "-", smallButtonStyle))
+        if (GUI.Button(new Rect(270, 180, 55, 45), "-", smallButtonStyle))
         {
             editorRows = Mathf.Max(3, editorRows - 1);
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(335, 130, 55, 45), "+", smallButtonStyle))
+        if (GUI.Button(new Rect(335, 180, 55, 45), "+", smallButtonStyle))
         {
             editorRows++;
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(270, 185, 55, 45), "-", smallButtonStyle))
+        if (GUI.Button(new Rect(270, 235, 55, 45), "-", smallButtonStyle))
         {
             editorColumns = Mathf.Max(3, editorColumns - 1);
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(335, 185, 55, 45), "+", smallButtonStyle))
+        if (GUI.Button(new Rect(335, 235, 55, 45), "+", smallButtonStyle))
         {
             editorColumns++;
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(270, 240, 55, 45), "-", smallButtonStyle))
+        if (GUI.Button(new Rect(270, 290, 55, 45), "-", smallButtonStyle))
         {
             editorLives = Mathf.Max(1, editorLives - 1);
             lives = editorLives;
         }
 
-        if (GUI.Button(new Rect(335, 240, 55, 45), "+", smallButtonStyle))
+        if (GUI.Button(new Rect(335, 290, 55, 45), "+", smallButtonStyle))
         {
             editorLives++;
             lives = editorLives;
@@ -962,8 +1079,8 @@ public class BoardController : MonoBehaviour
         }
 
         GUI.Label(
-            new Rect(30, 300, Screen.width - 60, 40),
-            "Click empty cell - create Up arrow. Click arrow - rotate. Double click arrow - delete. Export JSON copies level to clipboard.",
+            new Rect(30, 365, Screen.width - 60, 40),
+            "Prev/Next select existing level. Load opens it in editor. Export JSON copies edited level to clipboard.",
             hintStyle
         );
     }
