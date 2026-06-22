@@ -27,6 +27,10 @@ public class BoardController : MonoBehaviour
     [SerializeField] private int editorLives = 3;
     [SerializeField] private float doubleClickThreshold = 0.3f;
 
+    private const float GameTopGuiHeight = 330f;
+    private const float EditorTopGuiHeight = 360f;
+    private const float BoardTopMarginWorld = 0.25f;
+
     private ArrowView[,] grid;
     private int arrowsLeft;
     private bool isBusy;
@@ -495,8 +499,25 @@ public class BoardController : MonoBehaviour
         }
 
         mainCamera.orthographic = true;
-        mainCamera.orthographicSize = rows * cellSize / 2f + 1.2f;
-        mainCamera.transform.position = new Vector3(0f, 0f, -10f);
+
+        float aspect = Mathf.Max(0.1f, mainCamera.aspect);
+        float verticalSize = rows * cellSize / 2f + 1.2f;
+        float horizontalSize = columns * cellSize / (2f * aspect) + 0.4f;
+        mainCamera.orthographicSize = Mathf.Max(verticalSize, horizontalSize);
+
+        float cameraY = 0f;
+
+        if (isEditorMode)
+        {
+            float screenHeight = Mathf.Max(1f, Screen.height);
+            float panelFraction = Mathf.Clamp01(EditorTopGuiHeight / screenHeight);
+            float boardTop = rows * cellSize / 2f;
+
+            cameraY = boardTop + BoardTopMarginWorld - mainCamera.orthographicSize +
+                      2f * mainCamera.orthographicSize * panelFraction;
+        }
+
+        mainCamera.transform.position = new Vector3(0f, cameraY, -10f);
     }
 
     private Sprite CreateSquareSprite()
@@ -693,7 +714,9 @@ public class BoardController : MonoBehaviour
     private bool IsPointerOverTopGui(Vector2 screenPosition)
     {
         float guiY = Screen.height - screenPosition.y;
-        return guiY <= 330f;
+        float topGuiHeight = isEditorMode ? EditorTopGuiHeight : GameTopGuiHeight;
+
+        return guiY <= topGuiHeight;
     }
 
     private void ExportEditorJson()
@@ -859,83 +882,89 @@ public class BoardController : MonoBehaviour
 
     private void DrawEditorGui(GUIStyle labelStyle, GUIStyle buttonStyle)
     {
-        GUI.Box(new Rect(0, 0, Screen.width, 330), "");
+        GUI.Box(new Rect(0, 0, Screen.width, EditorTopGuiHeight), "");
 
-        GUI.Label(new Rect(30, 25, 500, 60), "EDITOR MODE", labelStyle);
-        GUI.Label(new Rect(30, 80, 300, 50), $"Level ID: {editorLevelId}", labelStyle);
-        GUI.Label(new Rect(30, 130, 300, 50), $"Rows: {editorRows}", labelStyle);
-        GUI.Label(new Rect(30, 180, 300, 50), $"Columns: {editorColumns}", labelStyle);
-        GUI.Label(new Rect(30, 230, 300, 50), $"Lives: {editorLives}", labelStyle);
+        GUIStyle editorLabelStyle = new GUIStyle(labelStyle);
+        editorLabelStyle.fontSize = 28;
 
-        if (GUI.Button(new Rect(360, 80, 70, 50), "-", buttonStyle))
+        GUIStyle smallButtonStyle = new GUIStyle(buttonStyle);
+        smallButtonStyle.fontSize = 24;
+
+        GUIStyle hintStyle = new GUIStyle(GUI.skin.label);
+        hintStyle.fontSize = 20;
+        hintStyle.normal.textColor = Color.white;
+
+        GUI.Label(new Rect(30, 25, 500, 45), "EDITOR MODE", editorLabelStyle);
+        GUI.Label(new Rect(30, 75, 260, 45), $"Level ID: {editorLevelId}", editorLabelStyle);
+        GUI.Label(new Rect(30, 130, 260, 45), $"Rows: {editorRows}", editorLabelStyle);
+        GUI.Label(new Rect(30, 185, 260, 45), $"Columns: {editorColumns}", editorLabelStyle);
+        GUI.Label(new Rect(30, 240, 260, 45), $"Lives: {editorLives}", editorLabelStyle);
+
+        if (GUI.Button(new Rect(270, 75, 55, 45), "-", smallButtonStyle))
         {
             editorLevelId = Mathf.Max(1, editorLevelId - 1);
         }
 
-        if (GUI.Button(new Rect(440, 80, 70, 50), "+", buttonStyle))
+        if (GUI.Button(new Rect(335, 75, 55, 45), "+", smallButtonStyle))
         {
             editorLevelId++;
         }
 
-        if (GUI.Button(new Rect(360, 130, 70, 50), "-", buttonStyle))
+        if (GUI.Button(new Rect(270, 130, 55, 45), "-", smallButtonStyle))
         {
             editorRows = Mathf.Max(3, editorRows - 1);
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(440, 130, 70, 50), "+", buttonStyle))
+        if (GUI.Button(new Rect(335, 130, 55, 45), "+", smallButtonStyle))
         {
             editorRows++;
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(360, 180, 70, 50), "-", buttonStyle))
+        if (GUI.Button(new Rect(270, 185, 55, 45), "-", smallButtonStyle))
         {
             editorColumns = Mathf.Max(3, editorColumns - 1);
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(440, 180, 70, 50), "+", buttonStyle))
+        if (GUI.Button(new Rect(335, 185, 55, 45), "+", smallButtonStyle))
         {
             editorColumns++;
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(360, 230, 70, 50), "-", buttonStyle))
+        if (GUI.Button(new Rect(270, 240, 55, 45), "-", smallButtonStyle))
         {
             editorLives = Mathf.Max(1, editorLives - 1);
             lives = editorLives;
         }
 
-        if (GUI.Button(new Rect(440, 230, 70, 50), "+", buttonStyle))
+        if (GUI.Button(new Rect(335, 240, 55, 45), "+", smallButtonStyle))
         {
             editorLives++;
             lives = editorLives;
         }
 
-        if (GUI.Button(new Rect(Screen.width - 760, 80, 220, 70), "Clear", buttonStyle))
+        if (GUI.Button(new Rect(Screen.width - 520, 75, 140, 60), "Clear", smallButtonStyle))
         {
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(Screen.width - 520, 80, 220, 70), "Export JSON", buttonStyle))
+        if (GUI.Button(new Rect(Screen.width - 365, 75, 190, 60), "Export JSON", smallButtonStyle))
         {
             ExportEditorJson();
         }
 
-        if (GUI.Button(new Rect(Screen.width - 280, 80, 220, 70), "Back", buttonStyle))
+        if (GUI.Button(new Rect(Screen.width - 160, 75, 130, 60), "Back", smallButtonStyle))
         {
             ExitEditorMode();
         }
 
-        GUIStyle smallLabelStyle = new GUIStyle(GUI.skin.label);
-        smallLabelStyle.fontSize = 24;
-        smallLabelStyle.normal.textColor = Color.white;
-
         GUI.Label(
-            new Rect(30, 285, Screen.width - 60, 40),
+            new Rect(30, 300, Screen.width - 60, 40),
             "Click empty cell - create Up arrow. Click arrow - rotate. Double click arrow - delete. Export JSON copies level to clipboard.",
-            smallLabelStyle
+            hintStyle
         );
     }
 }
