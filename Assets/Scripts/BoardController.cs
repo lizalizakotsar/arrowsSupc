@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -19,16 +20,25 @@ public class BoardController : MonoBehaviour
     [SerializeField] private float moveDuration = 0.25f;
     [SerializeField] private float bumpDistance = 0.25f;
 
+    [Header("Level Editor")]
+    [SerializeField] private int editorLevelId = 1;
+    [SerializeField] private int editorRows = 8;
+    [SerializeField] private int editorColumns = 6;
+    [SerializeField] private int editorLives = 3;
+    [SerializeField] private float doubleClickThreshold = 0.3f;
+
     private ArrowView[,] grid;
     private int arrowsLeft;
     private bool isBusy;
     private bool isGameOver;
     private bool isLevelCompleted;
     private bool isAllLevelsCompleted;
+    private bool isEditorMode;
 
     private Sprite squareSprite;
-
-    private TextAsset[] levelAssets; // загрузка левелов
+    private TextAsset[] levelAssets;
+    private ArrowView lastClickedEditorArrow;
+    private float lastEditorClickTime;
 
     private void Start()
     {
@@ -41,14 +51,33 @@ public class BoardController : MonoBehaviour
 
     private void Update()
     {
+        if (!TryGetPressedScreenPosition(out Vector2 screenPosition))
+        {
+            return;
+        }
+
+        if (isEditorMode)
+        {
+            TryHandleEditorClick(screenPosition);
+            return;
+        }
+
         if (isBusy || isGameOver || isLevelCompleted)
         {
             return;
         }
 
+        TrySelectArrow(screenPosition);
+    }
+
+    private bool TryGetPressedScreenPosition(out Vector2 screenPosition)
+    {
+        screenPosition = Vector2.zero;
+
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
-            TrySelectArrow(Mouse.current.position.ReadValue());
+            screenPosition = Mouse.current.position.ReadValue();
+            return true;
         }
 
         if (Touchscreen.current != null)
@@ -57,9 +86,12 @@ public class BoardController : MonoBehaviour
 
             if (touch.press.wasPressedThisFrame)
             {
-                TrySelectArrow(touch.position.ReadValue());
+                screenPosition = touch.position.ReadValue();
+                return true;
             }
         }
+
+        return false;
     }
 
     private void LoadLevelList()
@@ -80,6 +112,11 @@ public class BoardController : MonoBehaviour
 
     private void TrySelectArrow(Vector2 screenPosition)
     {
+        if (IsPointerOverTopGui(screenPosition))
+        {
+            return;
+        }
+
         Camera mainCamera = Camera.main;
 
         if (mainCamera == null)
@@ -111,7 +148,7 @@ public class BoardController : MonoBehaviour
 
     public void OnArrowClicked(ArrowView arrow)
     {
-        if (isBusy || isGameOver || isLevelCompleted)
+        if (isBusy || isGameOver || isLevelCompleted || isEditorMode)
         {
             return;
         }
@@ -403,6 +440,18 @@ public class BoardController : MonoBehaviour
         };
     }
 
+    private ArrowDirection GetNextDirection(ArrowDirection direction)
+    {
+        return direction switch
+        {
+            ArrowDirection.Up => ArrowDirection.Right,
+            ArrowDirection.Right => ArrowDirection.Down,
+            ArrowDirection.Down => ArrowDirection.Left,
+            ArrowDirection.Left => ArrowDirection.Up,
+            _ => ArrowDirection.Up
+        };
+    }
+
     private bool IsInsideBoard(int row, int column)
     {
         return row >= 0 && row < rows && column >= 0 && column < columns;
@@ -414,6 +463,26 @@ public class BoardController : MonoBehaviour
         float y = ((rows - 1) / 2f - row) * cellSize;
 
         return new Vector3(x, y, 0f);
+    }
+
+    private bool TryGetCellFromWorldPosition(Vector3 worldPosition, out int row, out int column)
+    {
+        float columnFloat = worldPosition.x / cellSize + (columns - 1) / 2f;
+        float rowFloat = (rows - 1) / 2f - worldPosition.y / cellSize;
+
+        column = Mathf.RoundToInt(columnFloat);
+        row = Mathf.RoundToInt(rowFloat);
+
+        if (!IsInsideBoard(row, column))
+        {
+            return false;
+        }
+
+        Vector3 cellCenter = GetWorldPosition(row, column);
+        float halfCellSize = cellSize / 2f;
+
+        return Mathf.Abs(worldPosition.x - cellCenter.x) <= halfCellSize &&
+               Mathf.Abs(worldPosition.y - cellCenter.y) <= halfCellSize;
     }
 
     private void SetupCamera()
@@ -456,6 +525,7 @@ public class BoardController : MonoBehaviour
         isGameOver = false;
         isLevelCompleted = false;
         isAllLevelsCompleted = false;
+        isEditorMode = false;
 
         GenerateLevel();
 
@@ -481,10 +551,58 @@ public class BoardController : MonoBehaviour
         isGameOver = false;
         isLevelCompleted = false;
         isAllLevelsCompleted = false;
+        isEditorMode = false;
 
         GenerateLevel();
 
         Debug.Log($"Переход на уровень {currentLevelIndex + 1}.");
+    }
+
+    private void EnterEditorMode()
+    {
+        StopAllCoroutines();
+
+        isEditorMode = true;
+        isBusy = false;
+        isGameOver = false;
+        isLevelCompleted = false;
+        isAllLevelsCompleted = false;
+
+        RebuildEditorBoard();
+
+        Debug.Log("Включен режим редактора уровня.");
+    }
+
+    private void ExitEditorMode()
+    {
+        StopAllCoroutines();
+        ClearBoard();
+
+        isEditorMode = false;
+        isBusy = false;
+        isGameOver = false;
+        isLevelCompleted = false;
+        isAllLevelsCompleted = false;
+
+        GenerateLevel();
+
+        Debug.Log("Выход из редактора уровня.");
+    }
+
+    private void RebuildEditorBoard()
+    {
+        ClearBoard();
+
+        rows = editorRows;
+        columns = editorColumns;
+        lives = editorLives;
+        arrowsLeft = 0;
+        grid = new ArrowView[rows, columns];
+        lastClickedEditorArrow = null;
+        lastEditorClickTime = 0f;
+
+        SetupCamera();
+        CreateCells();
     }
 
     private void ClearBoard()
@@ -493,6 +611,133 @@ public class BoardController : MonoBehaviour
         {
             Destroy(transform.GetChild(i).gameObject);
         }
+    }
+
+    private void TryHandleEditorClick(Vector2 screenPosition)
+    {
+        if (IsPointerOverTopGui(screenPosition))
+        {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+
+        if (mainCamera == null)
+        {
+            return;
+        }
+
+        Vector3 worldPosition = mainCamera.ScreenToWorldPoint(screenPosition);
+        Vector2 point = new Vector2(worldPosition.x, worldPosition.y);
+
+        RaycastHit2D hit = Physics2D.Raycast(point, Vector2.zero);
+        ArrowView arrow = hit.collider != null ? hit.collider.GetComponent<ArrowView>() : null;
+
+        if (arrow != null)
+        {
+            bool isDoubleClick = lastClickedEditorArrow == arrow &&
+                                 Time.unscaledTime - lastEditorClickTime <= doubleClickThreshold;
+
+            if (isDoubleClick)
+            {
+                DeleteEditorArrow(arrow);
+                lastClickedEditorArrow = null;
+                lastEditorClickTime = 0f;
+                return;
+            }
+
+            RotateEditorArrow(arrow);
+            lastClickedEditorArrow = arrow;
+            lastEditorClickTime = Time.unscaledTime;
+            return;
+        }
+
+        if (!TryGetCellFromWorldPosition(worldPosition, out int row, out int column))
+        {
+            return;
+        }
+
+        if (grid[row, column] != null)
+        {
+            return;
+        }
+
+        PlaceArrow(row, column, ArrowDirection.Up);
+        lastClickedEditorArrow = null;
+        lastEditorClickTime = 0f;
+
+        Debug.Log($"Создана стрелка: row={row}, column={column}, direction=Up");
+    }
+
+    private void RotateEditorArrow(ArrowView arrow)
+    {
+        ArrowDirection nextDirection = GetNextDirection(arrow.Direction);
+        arrow.SetDirection(nextDirection);
+
+        Debug.Log($"Стрелка повернута: row={arrow.Row}, column={arrow.Column}, direction={nextDirection}");
+    }
+
+    private void DeleteEditorArrow(ArrowView arrow)
+    {
+        if (grid[arrow.Row, arrow.Column] == arrow)
+        {
+            grid[arrow.Row, arrow.Column] = null;
+        }
+
+        Destroy(arrow.gameObject);
+        arrowsLeft = Mathf.Max(0, arrowsLeft - 1);
+
+        Debug.Log($"Стрелка удалена: row={arrow.Row}, column={arrow.Column}");
+    }
+
+    private bool IsPointerOverTopGui(Vector2 screenPosition)
+    {
+        float guiY = Screen.height - screenPosition.y;
+        return guiY <= 330f;
+    }
+
+    private void ExportEditorJson()
+    {
+        string json = BuildEditorJson();
+        GUIUtility.systemCopyBuffer = json;
+
+        Debug.Log($"JSON уровня скопирован в буфер обмена:\n{json}");
+    }
+
+    private string BuildEditorJson()
+    {
+        List<ArrowConfig> arrowConfigs = new List<ArrowConfig>();
+
+        for (int row = 0; row < rows; row++)
+        {
+            for (int column = 0; column < columns; column++)
+            {
+                ArrowView arrow = grid[row, column];
+
+                if (arrow == null)
+                {
+                    continue;
+                }
+
+                arrowConfigs.Add(new ArrowConfig
+                {
+                    row = row,
+                    column = column,
+                    direction = arrow.Direction.ToString()
+                });
+            }
+        }
+
+        LevelConfig levelConfig = new LevelConfig
+        {
+            levelId = editorLevelId,
+            rows = rows,
+            columns = columns,
+            lives = editorLives,
+            arrows = arrowConfigs.ToArray()
+        };
+
+        return JsonUtility.ToJson(levelConfig, true);
     }
 
     private void OnGUI()
@@ -504,6 +749,12 @@ public class BoardController : MonoBehaviour
         GUIStyle buttonStyle = new GUIStyle(GUI.skin.button);
         buttonStyle.fontSize = 32;
 
+        if (isEditorMode)
+        {
+            DrawEditorGui(labelStyle, buttonStyle);
+            return;
+        }
+
         GUI.Label(new Rect(30, 30, 400, 60), $"Level: {currentLevelIndex + 1}", labelStyle);
         GUI.Label(new Rect(30, 90, 400, 60), $"Lives: {lives}", labelStyle);
         GUI.Label(new Rect(30, 150, 400, 60), $"Arrows left: {arrowsLeft}", labelStyle);
@@ -511,6 +762,11 @@ public class BoardController : MonoBehaviour
         if (GUI.Button(new Rect(30, 220, 220, 70), "Restart", buttonStyle))
         {
             RestartLevel();
+        }
+
+        if (GUI.Button(new Rect(Screen.width - 250, 30, 220, 70), "Editor", buttonStyle))
+        {
+            EnterEditorMode();
         }
 
         if (isAllLevelsCompleted)
@@ -599,5 +855,87 @@ public class BoardController : MonoBehaviour
                 RestartLevel();
             }
         }
+    }
+
+    private void DrawEditorGui(GUIStyle labelStyle, GUIStyle buttonStyle)
+    {
+        GUI.Box(new Rect(0, 0, Screen.width, 330), "");
+
+        GUI.Label(new Rect(30, 25, 500, 60), "EDITOR MODE", labelStyle);
+        GUI.Label(new Rect(30, 80, 300, 50), $"Level ID: {editorLevelId}", labelStyle);
+        GUI.Label(new Rect(30, 130, 300, 50), $"Rows: {editorRows}", labelStyle);
+        GUI.Label(new Rect(30, 180, 300, 50), $"Columns: {editorColumns}", labelStyle);
+        GUI.Label(new Rect(30, 230, 300, 50), $"Lives: {editorLives}", labelStyle);
+
+        if (GUI.Button(new Rect(360, 80, 70, 50), "-", buttonStyle))
+        {
+            editorLevelId = Mathf.Max(1, editorLevelId - 1);
+        }
+
+        if (GUI.Button(new Rect(440, 80, 70, 50), "+", buttonStyle))
+        {
+            editorLevelId++;
+        }
+
+        if (GUI.Button(new Rect(360, 130, 70, 50), "-", buttonStyle))
+        {
+            editorRows = Mathf.Max(3, editorRows - 1);
+            RebuildEditorBoard();
+        }
+
+        if (GUI.Button(new Rect(440, 130, 70, 50), "+", buttonStyle))
+        {
+            editorRows++;
+            RebuildEditorBoard();
+        }
+
+        if (GUI.Button(new Rect(360, 180, 70, 50), "-", buttonStyle))
+        {
+            editorColumns = Mathf.Max(3, editorColumns - 1);
+            RebuildEditorBoard();
+        }
+
+        if (GUI.Button(new Rect(440, 180, 70, 50), "+", buttonStyle))
+        {
+            editorColumns++;
+            RebuildEditorBoard();
+        }
+
+        if (GUI.Button(new Rect(360, 230, 70, 50), "-", buttonStyle))
+        {
+            editorLives = Mathf.Max(1, editorLives - 1);
+            lives = editorLives;
+        }
+
+        if (GUI.Button(new Rect(440, 230, 70, 50), "+", buttonStyle))
+        {
+            editorLives++;
+            lives = editorLives;
+        }
+
+        if (GUI.Button(new Rect(Screen.width - 760, 80, 220, 70), "Clear", buttonStyle))
+        {
+            RebuildEditorBoard();
+        }
+
+        if (GUI.Button(new Rect(Screen.width - 520, 80, 220, 70), "Export JSON", buttonStyle))
+        {
+            ExportEditorJson();
+        }
+
+        if (GUI.Button(new Rect(Screen.width - 280, 80, 220, 70), "Back", buttonStyle))
+        {
+            ExitEditorMode();
+        }
+
+        GUIStyle smallLabelStyle = new GUIStyle(GUI.skin.label);
+        smallLabelStyle.fontSize = 24;
+        smallLabelStyle.normal.textColor = Color.white;
+
+        GUI.Label(
+            new Rect(30, 285, Screen.width - 60, 40),
+            "Click empty cell - create Up arrow. Click arrow - rotate. Double click arrow - delete. Export JSON copies level to clipboard.",
+            smallLabelStyle
+        );
     }
 }
