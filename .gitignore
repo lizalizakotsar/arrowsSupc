@@ -28,3 +28,6 @@ MemoryCaptures/
 Recordings/
 
 Assets/AssetStoreTools*
+
+.utmp/
+BUIDS/
