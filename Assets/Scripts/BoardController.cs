@@ -1060,14 +1060,9 @@ public class BoardController : MonoBehaviour
             RestartLevel();
         }
 
-        if (GUI.Button(new Rect(Screen.width - 250, 30, 220, 70), "Levels", buttonStyle))
+        if (GUI.Button(new Rect(Screen.width - 250, 30, 220, 70), "Menu", buttonStyle))
         {
             OpenLevelSelectMenu();
-        }
-
-        if (GUI.Button(new Rect(Screen.width - 250, 120, 220, 70), "Editor", buttonStyle))
-        {
-            EnterEditorMode();
         }
 
         if (isAllLevelsCompleted)
@@ -1169,11 +1164,12 @@ public class BoardController : MonoBehaviour
         GUIStyle levelButtonStyle = new GUIStyle(buttonStyle);
         levelButtonStyle.fontSize = 24;
 
-        GUI.Label(new Rect(0, 40, Screen.width, 70), "LEVEL SELECT", titleStyle);
+        GUI.Label(new Rect(0, 40, Screen.width, 70), "MENU", titleStyle);
+        GUI.Label(new Rect(0, 105, Screen.width, 50), "Choose level", titleStyle);
 
         if (levelAssets == null || levelAssets.Length == 0)
         {
-            GUI.Label(new Rect(0, 140, Screen.width, 60), "No levels found", titleStyle);
+            GUI.Label(new Rect(0, 170, Screen.width, 60), "No levels found", titleStyle);
         }
         else
         {
@@ -1181,7 +1177,7 @@ public class BoardController : MonoBehaviour
             float buttonHeight = 70f;
             float gap = 20f;
             float startX = 60f;
-            float startY = 140f;
+            float startY = 170f;
             int buttonsPerRow = Mathf.Max(1, Mathf.FloorToInt((Screen.width - startX * 2f + gap) / (buttonWidth + gap)));
 
             for (int i = 0; i < levelAssets.Length; i++)
