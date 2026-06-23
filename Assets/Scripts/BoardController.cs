@@ -33,7 +33,7 @@ public class BoardController : MonoBehaviour
     [SerializeField] private float doubleClickThreshold = 0.3f;
 
     private const float GameTopGuiHeight = 330f;
-    private const float EditorTopGuiHeight = 390f;
+    private const float EditorTopGuiHeight = 400f;
 
     private ArrowView[,] grid;
     private int arrowsLeft;
@@ -42,6 +42,7 @@ public class BoardController : MonoBehaviour
     private bool isLevelCompleted;
     private bool isAllLevelsCompleted;
     private bool isEditorMode;
+    private bool isLevelSelectMenuOpen;
 
     private Sprite squareSprite;
     private TextAsset[] levelAssets;
@@ -64,6 +65,11 @@ public class BoardController : MonoBehaviour
     private void Update()
     {
         if (!TryGetPressedScreenPosition(out Vector2 screenPosition))
+        {
+            return;
+        }
+
+        if (isLevelSelectMenuOpen)
         {
             return;
         }
@@ -163,7 +169,7 @@ public class BoardController : MonoBehaviour
 
     public void OnArrowClicked(ArrowView arrow)
     {
-        if (isBusy || isGameOver || isLevelCompleted || isEditorMode)
+        if (isBusy || isGameOver || isLevelCompleted || isEditorMode || isLevelSelectMenuOpen)
         {
             return;
         }
@@ -553,6 +559,7 @@ public class BoardController : MonoBehaviour
         isLevelCompleted = false;
         isAllLevelsCompleted = false;
         isEditorMode = false;
+        isLevelSelectMenuOpen = false;
 
         GenerateLevel();
 
@@ -579,10 +586,64 @@ public class BoardController : MonoBehaviour
         isLevelCompleted = false;
         isAllLevelsCompleted = false;
         isEditorMode = false;
+        isLevelSelectMenuOpen = false;
 
         GenerateLevel();
 
         Debug.Log($"Переход на уровень {currentLevelIndex + 1}.");
+    }
+
+    private void OpenLevelSelectMenu()
+    {
+        LoadLevelList();
+
+        StopAllCoroutines();
+
+        isLevelSelectMenuOpen = true;
+        isBusy = false;
+        isGameOver = false;
+        isLevelCompleted = false;
+        isAllLevelsCompleted = false;
+
+        Debug.Log("Открыто меню выбора уровня.");
+    }
+
+    private void CloseLevelSelectMenu()
+    {
+        isLevelSelectMenuOpen = false;
+        Debug.Log("Закрыто меню выбора уровня.");
+    }
+
+    private void LoadGameLevel(int levelIndex)
+    {
+        if (levelAssets == null || levelAssets.Length == 0)
+        {
+            Debug.LogError("Нет уровней для загрузки.");
+            return;
+        }
+
+        if (levelIndex < 0 || levelIndex >= levelAssets.Length)
+        {
+            Debug.LogError($"Некорректный индекс уровня: {levelIndex}");
+            return;
+        }
+
+        StopAllCoroutines();
+        ClearBoard();
+
+        currentLevelIndex = levelIndex;
+        lives = 3;
+        arrowsLeft = 0;
+        isBusy = false;
+        isGameOver = false;
+        isLevelCompleted = false;
+        isAllLevelsCompleted = false;
+        isEditorMode = false;
+        isLevelSelectMenuOpen = false;
+
+        GenerateLevel();
+
+        Debug.Log($"Выбран уровень: {levelAssets[levelIndex].name}");
     }
 
     private void EnterEditorMode()
@@ -590,6 +651,7 @@ public class BoardController : MonoBehaviour
         StopAllCoroutines();
 
         isEditorMode = true;
+        isLevelSelectMenuOpen = false;
         isBusy = false;
         isGameOver = false;
         isLevelCompleted = false;
@@ -614,6 +676,7 @@ public class BoardController : MonoBehaviour
         ClearBoard();
 
         isEditorMode = false;
+        isLevelSelectMenuOpen = false;
         isBusy = false;
         isGameOver = false;
         isLevelCompleted = false;
@@ -976,6 +1039,12 @@ public class BoardController : MonoBehaviour
         GUIStyle buttonStyle = new GUIStyle(GUI.skin.button);
         buttonStyle.fontSize = 32;
 
+        if (isLevelSelectMenuOpen)
+        {
+            DrawLevelSelectGui(labelStyle, buttonStyle);
+            return;
+        }
+
         if (isEditorMode)
         {
             DrawEditorGui(labelStyle, buttonStyle);
@@ -991,7 +1060,12 @@ public class BoardController : MonoBehaviour
             RestartLevel();
         }
 
-        if (GUI.Button(new Rect(Screen.width - 250, 30, 220, 70), "Editor", buttonStyle))
+        if (GUI.Button(new Rect(Screen.width - 250, 30, 220, 70), "Levels", buttonStyle))
+        {
+            OpenLevelSelectMenu();
+        }
+
+        if (GUI.Button(new Rect(Screen.width - 250, 120, 220, 70), "Editor", buttonStyle))
         {
             EnterEditorMode();
         }
@@ -1084,6 +1158,68 @@ public class BoardController : MonoBehaviour
         }
     }
 
+    private void DrawLevelSelectGui(GUIStyle labelStyle, GUIStyle buttonStyle)
+    {
+        GUI.Box(new Rect(0, 0, Screen.width, Screen.height), "");
+
+        GUIStyle titleStyle = new GUIStyle(labelStyle);
+        titleStyle.fontSize = 42;
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+
+        GUIStyle levelButtonStyle = new GUIStyle(buttonStyle);
+        levelButtonStyle.fontSize = 24;
+
+        GUI.Label(new Rect(0, 40, Screen.width, 70), "LEVEL SELECT", titleStyle);
+
+        if (levelAssets == null || levelAssets.Length == 0)
+        {
+            GUI.Label(new Rect(0, 140, Screen.width, 60), "No levels found", titleStyle);
+        }
+        else
+        {
+            float buttonWidth = 180f;
+            float buttonHeight = 70f;
+            float gap = 20f;
+            float startX = 60f;
+            float startY = 140f;
+            int buttonsPerRow = Mathf.Max(1, Mathf.FloorToInt((Screen.width - startX * 2f + gap) / (buttonWidth + gap)));
+
+            for (int i = 0; i < levelAssets.Length; i++)
+            {
+                int row = i / buttonsPerRow;
+                int column = i % buttonsPerRow;
+
+                float x = startX + column * (buttonWidth + gap);
+                float y = startY + row * (buttonHeight + gap);
+
+                string title = $"Level {i + 1}";
+
+                if (i == currentLevelIndex)
+                {
+                    title += " *";
+                }
+
+                if (GUI.Button(new Rect(x, y, buttonWidth, buttonHeight), title, levelButtonStyle))
+                {
+                    LoadGameLevel(i);
+                }
+            }
+        }
+
+        float bottomY = Screen.height - 110f;
+
+        if (GUI.Button(new Rect(Screen.width / 2f - 260f, bottomY, 240f, 70f), "Editor", buttonStyle))
+        {
+            isLevelSelectMenuOpen = false;
+            EnterEditorMode();
+        }
+
+        if (GUI.Button(new Rect(Screen.width / 2f + 20f, bottomY, 240f, 70f), "Close", buttonStyle))
+        {
+            CloseLevelSelectMenu();
+        }
+    }
+
     private void DrawEditorGui(GUIStyle labelStyle, GUIStyle buttonStyle)
     {
         GUI.Box(new Rect(0, 0, Screen.width, EditorTopGuiHeight), "");
@@ -1150,57 +1286,57 @@ public class BoardController : MonoBehaviour
             RebuildEditorBoard();
         }
 
-        GUI.Label(new Rect(590, 165, 160, 40), $"Columns: {editorColumns}", editorLabelStyle);
+        GUI.Label(new Rect(30, 215, 160, 40), $"Columns: {editorColumns}", editorLabelStyle);
 
-        if (GUI.Button(new Rect(755, 165, 50, 42), "-", smallButtonStyle))
+        if (GUI.Button(new Rect(200, 215, 50, 42), "-", smallButtonStyle))
         {
             editorColumns = Mathf.Max(3, editorColumns - 1);
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(815, 165, 50, 42), "+", smallButtonStyle))
+        if (GUI.Button(new Rect(260, 215, 50, 42), "+", smallButtonStyle))
         {
             editorColumns++;
             RebuildEditorBoard();
         }
 
-        GUI.Label(new Rect(895, 165, 130, 40), $"Lives: {editorLives}", editorLabelStyle);
+        GUI.Label(new Rect(325, 215, 130, 40), $"Lives: {editorLives}", editorLabelStyle);
 
-        if (GUI.Button(new Rect(1030, 165, 50, 42), "-", smallButtonStyle))
+        if (GUI.Button(new Rect(460, 215, 50, 42), "-", smallButtonStyle))
         {
             editorLives = Mathf.Max(1, editorLives - 1);
             lives = editorLives;
         }
 
-        if (GUI.Button(new Rect(1090, 165, 50, 42), "+", smallButtonStyle))
+        if (GUI.Button(new Rect(520, 215, 50, 42), "+", smallButtonStyle))
         {
             editorLives++;
             lives = editorLives;
         }
 
-        if (GUI.Button(new Rect(30, 235, 120, 55), "Save", smallButtonStyle))
+        if (GUI.Button(new Rect(30, 280, 120, 55), "Save", smallButtonStyle))
         {
             SaveEditorJsonToFile();
         }
 
-        if (GUI.Button(new Rect(165, 235, 180, 55), "Export JSON", smallButtonStyle))
+        if (GUI.Button(new Rect(165, 280, 180, 55), "Export JSON", smallButtonStyle))
         {
             ExportEditorJson();
         }
 
-        if (GUI.Button(new Rect(360, 235, 120, 55), "Clear", smallButtonStyle))
+        if (GUI.Button(new Rect(360, 280, 120, 55), "Clear", smallButtonStyle))
         {
             RebuildEditorBoard();
         }
 
-        if (GUI.Button(new Rect(495, 235, 120, 55), "Back", smallButtonStyle))
+        if (GUI.Button(new Rect(495, 280, 120, 55), "Back", smallButtonStyle))
         {
             ExitEditorMode();
         }
 
         GUI.Label(
-            new Rect(30, 315, Screen.width - 60, 60),
-            "Prev/Next select level. Load opens it. New Level creates empty level. Save writes JSON file. Export only copies JSON to clipboard.",
+            new Rect(30, 350, Screen.width - 60, 40),
+            "Load opens a level. New Level creates empty level. Save writes JSON file. Export only copies JSON to clipboard.",
             hintStyle
         );
     }
