@@ -1,0 +1,13 @@
+{
+    "levelId": 6,
+    "rows": 8,
+    "columns": 6,
+    "lives": 3,
+    "arrows": [
+        {
+            "row": 1,
+            "column": 2,
+            "direction": "Down"
+        }
+    ]
+}

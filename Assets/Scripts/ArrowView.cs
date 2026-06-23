@@ -34,19 +34,11 @@ public class ArrowView : MonoBehaviour
         isLocked = !value;
     }
 
-    private void OnMouseDown()
+    public void SetDirection(ArrowDirection direction)
     {
-        if (isLocked)
-        {
-            return;
-        }
-
-        if (boardController == null)
-        {
-            return;
-        }
-
-        boardController.OnArrowClicked(this);
+        Direction = direction;
+        name = $"Arrow_{Row}_{Column}_{Direction}";
+        SetLabel(direction);
     }
 
     private void SetLabel(ArrowDirection direction)
