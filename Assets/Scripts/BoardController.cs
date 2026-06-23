@@ -138,24 +138,7 @@ public class BoardController : MonoBehaviour
             return;
         }
 
-        Camera mainCamera = Camera.main;
-
-        if (mainCamera == null)
-        {
-            return;
-        }
-
-        Vector3 worldPosition = mainCamera.ScreenToWorldPoint(screenPosition);
-        Vector2 point = new Vector2(worldPosition.x, worldPosition.y);
-
-        RaycastHit2D hit = Physics2D.Raycast(point, Vector2.zero);
-
-        if (hit.collider == null)
-        {
-            return;
-        }
-
-        ArrowView arrow = hit.collider.GetComponent<ArrowView>();
+        ArrowView arrow = GetArrowFromScreenPosition(screenPosition);
 
         if (arrow == null)
         {
@@ -165,6 +148,35 @@ public class BoardController : MonoBehaviour
         Debug.Log($"Нажата стрелка: {arrow.name}");
 
         OnArrowClicked(arrow);
+    }
+
+    private ArrowView GetArrowFromScreenPosition(Vector2 screenPosition)
+    {
+        Camera mainCamera = Camera.main;
+
+        if (mainCamera == null)
+        {
+            return null;
+        }
+
+        Vector3 worldPosition = mainCamera.ScreenToWorldPoint(screenPosition);
+        Vector2 point = new Vector2(worldPosition.x, worldPosition.y);
+
+        RaycastHit2D hit = Physics2D.Raycast(point, Vector2.zero);
+
+        if (hit.collider == null)
+        {
+            return null;
+        }
+
+        ArrowPartView arrowPart = hit.collider.GetComponent<ArrowPartView>();
+
+        if (arrowPart != null)
+        {
+            return arrowPart.Arrow;
+        }
+
+        return hit.collider.GetComponent<ArrowView>();
     }
 
     public void OnArrowClicked(ArrowView arrow)
@@ -247,20 +259,27 @@ public class BoardController : MonoBehaviour
                 continue;
             }
 
-            if (!IsInsideBoard(arrowConfig.row, arrowConfig.column))
-            {
-                Debug.LogError($"Стрелка вне поля: row={arrowConfig.row}, column={arrowConfig.column}");
-                continue;
-            }
+            List<Vector2Int> bodyCells = ParseBodyCells(arrowConfig);
 
-            if (grid[arrowConfig.row, arrowConfig.column] != null)
-            {
-                Debug.LogError($"В клетке уже есть стрелка: row={arrowConfig.row}, column={arrowConfig.column}");
-                continue;
-            }
-
-            PlaceArrow(arrowConfig.row, arrowConfig.column, direction);
+            PlaceArrow(arrowConfig.row, arrowConfig.column, direction, bodyCells);
         }
+    }
+
+    private List<Vector2Int> ParseBodyCells(ArrowConfig arrowConfig)
+    {
+        List<Vector2Int> bodyCells = new List<Vector2Int>();
+
+        if (arrowConfig.body == null)
+        {
+            return bodyCells;
+        }
+
+        foreach (ArrowCellConfig bodyCell in arrowConfig.body)
+        {
+            bodyCells.Add(new Vector2Int(bodyCell.column, bodyCell.row));
+        }
+
+        return bodyCells;
     }
 
     private bool TryParseDirection(string value, out ArrowDirection direction)
@@ -293,57 +312,231 @@ public class BoardController : MonoBehaviour
 
     private void PlaceArrow(int row, int column, ArrowDirection direction)
     {
+        PlaceArrow(row, column, direction, null);
+    }
+
+    private void PlaceArrow(int row, int column, ArrowDirection direction, List<Vector2Int> bodyCells)
+    {
+        List<Vector2Int> occupiedCells = new List<Vector2Int>
+        {
+            new Vector2Int(column, row)
+        };
+
+        if (bodyCells != null)
+        {
+            occupiedCells.AddRange(bodyCells);
+        }
+
+        if (!ValidateArrowCells(row, column, occupiedCells))
+        {
+            return;
+        }
+
         GameObject arrowObject = new GameObject($"Arrow_{row}_{column}_{direction}");
         arrowObject.transform.SetParent(transform);
-        arrowObject.transform.position = GetWorldPosition(row, column);
+        arrowObject.transform.position = Vector3.zero;
 
-        SpriteRenderer background = arrowObject.AddComponent<SpriteRenderer>();
+        ArrowView arrowView = arrowObject.AddComponent<ArrowView>();
+        TextMesh headLabel = null;
+
+        for (int i = 0; i < occupiedCells.Count; i++)
+        {
+            Vector2Int cell = occupiedCells[i];
+            bool isHead = i == 0;
+            bool isTail = i == occupiedCells.Count - 1 && !isHead;
+            string label = GetArrowPartLabel(direction, occupiedCells, i);
+
+            TextMesh partLabel = CreateArrowPart(arrowObject.transform, arrowView, cell.y, cell.x, isHead, isTail, label);
+
+            if (isHead)
+            {
+                headLabel = partLabel;
+            }
+        }
+
+        arrowView.Init(this, row, column, direction, bodyCells, headLabel);
+
+        foreach (Vector2Int cell in arrowView.OccupiedCells)
+        {
+            grid[cell.y, cell.x] = arrowView;
+        }
+
+        arrowsLeft++;
+    }
+
+    private bool ValidateArrowCells(int headRow, int headColumn, List<Vector2Int> occupiedCells)
+    {
+        HashSet<Vector2Int> uniqueCells = new HashSet<Vector2Int>();
+
+        for (int i = 0; i < occupiedCells.Count; i++)
+        {
+            Vector2Int cell = occupiedCells[i];
+            int row = cell.y;
+            int column = cell.x;
+
+            if (!IsInsideBoard(row, column))
+            {
+                Debug.LogError($"Стрелка вне поля: row={row}, column={column}");
+                return false;
+            }
+
+            if (!uniqueCells.Add(cell))
+            {
+                Debug.LogError($"У стрелки есть повторяющаяся клетка: row={row}, column={column}");
+                return false;
+            }
+
+            if (grid[row, column] != null)
+            {
+                Debug.LogError($"В клетке уже есть стрелка: row={row}, column={column}");
+                return false;
+            }
+
+            if (i > 0)
+            {
+                Vector2Int previousCell = occupiedCells[i - 1];
+                int distance = Mathf.Abs(cell.x - previousCell.x) + Mathf.Abs(cell.y - previousCell.y);
+
+                if (distance != 1)
+                {
+                    Debug.LogError($"Тело стрелки должно быть непрерывным. Голова: row={headRow}, column={headColumn}");
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private TextMesh CreateArrowPart(
+        Transform parent,
+        ArrowView arrowView,
+        int row,
+        int column,
+        bool isHead,
+        bool isTail,
+        string label
+    )
+    {
+        GameObject partObject = new GameObject(isHead ? "Head" : isTail ? "Tail" : "Body");
+        partObject.transform.SetParent(parent);
+        partObject.transform.position = GetWorldPosition(row, column);
+
+        SpriteRenderer background = partObject.AddComponent<SpriteRenderer>();
         background.sprite = squareSprite;
-        background.color = new Color(0.15f, 0.45f, 0.85f, 1f);
+        background.color = isHead
+            ? new Color(0.15f, 0.45f, 0.85f, 1f)
+            : new Color(0.10f, 0.35f, 0.70f, 1f);
         background.sortingOrder = 1;
 
-        arrowObject.transform.localScale = Vector3.one * 0.82f;
+        partObject.transform.localScale = Vector3.one * (isHead ? 0.82f : 0.72f);
 
-        BoxCollider2D collider = arrowObject.AddComponent<BoxCollider2D>();
+        BoxCollider2D collider = partObject.AddComponent<BoxCollider2D>();
         collider.size = Vector2.one;
 
+        ArrowPartView arrowPart = partObject.AddComponent<ArrowPartView>();
+        arrowPart.Init(arrowView, row, column);
+
         GameObject labelObject = new GameObject("Label");
-        labelObject.transform.SetParent(arrowObject.transform);
+        labelObject.transform.SetParent(partObject.transform);
         labelObject.transform.localPosition = Vector3.zero;
 
         TextMesh textMesh = labelObject.AddComponent<TextMesh>();
         textMesh.anchor = TextAnchor.MiddleCenter;
         textMesh.alignment = TextAlignment.Center;
-        textMesh.characterSize = 0.12f;
-        textMesh.fontSize = 80;
+        textMesh.characterSize = isHead ? 0.12f : 0.08f;
+        textMesh.fontSize = isHead ? 80 : 60;
         textMesh.color = Color.white;
+        textMesh.text = label;
 
         MeshRenderer labelRenderer = labelObject.GetComponent<MeshRenderer>();
         labelRenderer.sortingOrder = 2;
 
-        ArrowView arrowView = arrowObject.AddComponent<ArrowView>();
-        arrowView.Init(this, row, column, direction, textMesh);
+        return textMesh;
+    }
 
-        grid[row, column] = arrowView;
-        arrowsLeft++;
+    private string GetArrowPartLabel(ArrowDirection direction, List<Vector2Int> occupiedCells, int cellIndex)
+    {
+        if (cellIndex == 0)
+        {
+            return direction switch
+            {
+                ArrowDirection.Up => "↑",
+                ArrowDirection.Down => "↓",
+                ArrowDirection.Left => "←",
+                ArrowDirection.Right => "→",
+                _ => "?"
+            };
+        }
+
+        Vector2Int currentCell = occupiedCells[cellIndex];
+        Vector2Int previousCell = occupiedCells[cellIndex - 1];
+        Vector2Int? nextCell = cellIndex < occupiedCells.Count - 1 ? occupiedCells[cellIndex + 1] : null;
+
+        if (!nextCell.HasValue)
+        {
+            return "●";
+        }
+
+        bool connectsUp = previousCell.y < currentCell.y || nextCell.Value.y < currentCell.y;
+        bool connectsDown = previousCell.y > currentCell.y || nextCell.Value.y > currentCell.y;
+        bool connectsLeft = previousCell.x < currentCell.x || nextCell.Value.x < currentCell.x;
+        bool connectsRight = previousCell.x > currentCell.x || nextCell.Value.x > currentCell.x;
+
+        if (connectsLeft && connectsRight)
+        {
+            return "━";
+        }
+
+        if (connectsUp && connectsDown)
+        {
+            return "┃";
+        }
+
+        if (connectsUp && connectsRight)
+        {
+            return "┗";
+        }
+
+        if (connectsUp && connectsLeft)
+        {
+            return "┛";
+        }
+
+        if (connectsDown && connectsRight)
+        {
+            return "┏";
+        }
+
+        if (connectsDown && connectsLeft)
+        {
+            return "┓";
+        }
+
+        return "•";
     }
 
     private bool IsPathClear(ArrowView arrow)
     {
         Vector2Int direction = GetDirectionVector(arrow.Direction);
 
-        int row = arrow.Row + direction.y;
-        int column = arrow.Column + direction.x;
-
-        while (IsInsideBoard(row, column))
+        foreach (Vector2Int occupiedCell in arrow.OccupiedCells)
         {
-            if (grid[row, column] != null)
-            {
-                return false;
-            }
+            int row = occupiedCell.y + direction.y;
+            int column = occupiedCell.x + direction.x;
 
-            row += direction.y;
-            column += direction.x;
+            while (IsInsideBoard(row, column))
+            {
+                ArrowView blockingArrow = grid[row, column];
+
+                if (blockingArrow != null && blockingArrow != arrow)
+                {
+                    return false;
+                }
+
+                row += direction.y;
+                column += direction.x;
+            }
         }
 
         return true;
@@ -354,10 +547,10 @@ public class BoardController : MonoBehaviour
         isBusy = true;
         arrow.SetInteractable(false);
 
-        grid[arrow.Row, arrow.Column] = null;
+        ClearArrowFromGrid(arrow);
 
         Vector3 startPosition = arrow.transform.position;
-        Vector3 targetPosition = GetExitPosition(arrow);
+        Vector3 targetPosition = GetExitOffset(arrow);
 
         float time = 0f;
 
@@ -391,7 +584,7 @@ public class BoardController : MonoBehaviour
 
         Vector3 startPosition = arrow.transform.position;
         Vector2Int direction = GetDirectionVector(arrow.Direction);
-        Vector3 bumpPosition = startPosition + new Vector3(direction.x, direction.y, 0f) * bumpDistance;
+        Vector3 bumpPosition = startPosition + GetWorldDirectionOffset(direction, bumpDistance);
 
         float halfDuration = moveDuration / 2f;
         float time = 0f;
@@ -433,20 +626,48 @@ public class BoardController : MonoBehaviour
         isBusy = false;
     }
 
-    private Vector3 GetExitPosition(ArrowView arrow)
+    private void ClearArrowFromGrid(ArrowView arrow)
+    {
+        foreach (Vector2Int occupiedCell in arrow.OccupiedCells)
+        {
+            if (IsInsideBoard(occupiedCell.y, occupiedCell.x) && grid[occupiedCell.y, occupiedCell.x] == arrow)
+            {
+                grid[occupiedCell.y, occupiedCell.x] = null;
+            }
+        }
+    }
+
+    private Vector3 GetExitOffset(ArrowView arrow)
     {
         Vector2Int direction = GetDirectionVector(arrow.Direction);
+        int steps = 0;
+        bool hasCellInsideBoard;
 
-        int row = arrow.Row;
-        int column = arrow.Column;
-
-        while (IsInsideBoard(row, column))
+        do
         {
-            row += direction.y;
-            column += direction.x;
-        }
+            steps++;
+            hasCellInsideBoard = false;
 
-        return GetWorldPosition(row, column);
+            foreach (Vector2Int occupiedCell in arrow.OccupiedCells)
+            {
+                int row = occupiedCell.y + direction.y * steps;
+                int column = occupiedCell.x + direction.x * steps;
+
+                if (IsInsideBoard(row, column))
+                {
+                    hasCellInsideBoard = true;
+                    break;
+                }
+            }
+        }
+        while (hasCellInsideBoard);
+
+        return arrow.transform.position + GetWorldDirectionOffset(direction, steps * cellSize);
+    }
+
+    private Vector3 GetWorldDirectionOffset(Vector2Int direction, float distance)
+    {
+        return new Vector3(direction.x, -direction.y, 0f) * distance;
     }
 
     private Vector2Int GetDirectionVector(ArrowDirection direction)
@@ -867,18 +1088,7 @@ public class BoardController : MonoBehaviour
             return;
         }
 
-        Camera mainCamera = Camera.main;
-
-        if (mainCamera == null)
-        {
-            return;
-        }
-
-        Vector3 worldPosition = mainCamera.ScreenToWorldPoint(screenPosition);
-        Vector2 point = new Vector2(worldPosition.x, worldPosition.y);
-
-        RaycastHit2D hit = Physics2D.Raycast(point, Vector2.zero);
-        ArrowView arrow = hit.collider != null ? hit.collider.GetComponent<ArrowView>() : null;
+        ArrowView arrow = GetArrowFromScreenPosition(screenPosition);
 
         if (arrow != null)
         {
@@ -898,6 +1108,15 @@ public class BoardController : MonoBehaviour
             lastEditorClickTime = Time.unscaledTime;
             return;
         }
+
+        Camera mainCamera = Camera.main;
+
+        if (mainCamera == null)
+        {
+            return;
+        }
+
+        Vector3 worldPosition = mainCamera.ScreenToWorldPoint(screenPosition);
 
         if (!TryGetCellFromWorldPosition(worldPosition, out int row, out int column))
         {
@@ -926,10 +1145,7 @@ public class BoardController : MonoBehaviour
 
     private void DeleteEditorArrow(ArrowView arrow)
     {
-        if (grid[arrow.Row, arrow.Column] == arrow)
-        {
-            grid[arrow.Row, arrow.Column] = null;
-        }
+        ClearArrowFromGrid(arrow);
 
         Destroy(arrow.gameObject);
         arrowsLeft = Mathf.Max(0, arrowsLeft - 1);
@@ -987,6 +1203,7 @@ public class BoardController : MonoBehaviour
     private string BuildEditorJson()
     {
         List<ArrowConfig> arrowConfigs = new List<ArrowConfig>();
+        HashSet<ArrowView> visitedArrows = new HashSet<ArrowView>();
 
         for (int row = 0; row < rows; row++)
         {
@@ -994,16 +1211,27 @@ public class BoardController : MonoBehaviour
             {
                 ArrowView arrow = grid[row, column];
 
-                if (arrow == null)
+                if (arrow == null || visitedArrows.Contains(arrow))
                 {
                     continue;
                 }
 
+                visitedArrows.Add(arrow);
+
+                ArrowCellConfig[] body = arrow.BodyCells
+                    .Select(cell => new ArrowCellConfig
+                    {
+                        row = cell.y,
+                        column = cell.x
+                    })
+                    .ToArray();
+
                 arrowConfigs.Add(new ArrowConfig
                 {
-                    row = row,
-                    column = column,
-                    direction = arrow.Direction.ToString()
+                    row = arrow.Row,
+                    column = arrow.Column,
+                    direction = arrow.Direction.ToString(),
+                    body = body
                 });
             }
         }
