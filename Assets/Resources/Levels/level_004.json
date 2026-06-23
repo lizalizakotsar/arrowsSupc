@@ -1,18 +1,93 @@
 {
-  "levelId": 4,
-  "rows": 10,
-  "columns": 4,
-  "lives": 3,
-  "arrows": [
-    { "row": 0, "column": 1, "direction": "Down" },
-    { "row": 0, "column": 3, "direction": "Down" },
-    { "row": 2, "column": 0, "direction": "Down" },
-    { "row": 2, "column": 3, "direction": "Left" },
-    { "row": 3, "column": 2, "direction": "Up" },
-    { "row": 3, "column": 3, "direction": "Left" },
-    { "row": 5, "column": 1, "direction": "Right" },
-    { "row": 5, "column": 2, "direction": "Right" },
-    { "row": 7, "column": 2, "direction": "Up" },
-    { "row": 7, "column": 3, "direction": "Up" }
-  ]
+    "levelId": 4,
+    "rows": 6,
+    "columns": 4,
+    "lives": 3,
+    "arrows": [
+        {
+            "row": 0,
+            "column": 0,
+            "direction": "Right"
+        },
+        {
+            "row": 0,
+            "column": 1,
+            "direction": "Down"
+        },
+        {
+            "row": 0,
+            "column": 2,
+            "direction": "Right"
+        },
+        {
+            "row": 0,
+            "column": 3,
+            "direction": "Down"
+        },
+        {
+            "row": 1,
+            "column": 1,
+            "direction": "Down"
+        },
+        {
+            "row": 1,
+            "column": 2,
+            "direction": "Up"
+        },
+        {
+            "row": 1,
+            "column": 3,
+            "direction": "Down"
+        },
+        {
+            "row": 2,
+            "column": 0,
+            "direction": "Down"
+        },
+        {
+            "row": 2,
+            "column": 1,
+            "direction": "Left"
+        },
+        {
+            "row": 2,
+            "column": 2,
+            "direction": "Up"
+        },
+        {
+            "row": 2,
+            "column": 3,
+            "direction": "Down"
+        },
+        {
+            "row": 3,
+            "column": 0,
+            "direction": "Right"
+        },
+        {
+            "row": 3,
+            "column": 1,
+            "direction": "Right"
+        },
+        {
+            "row": 3,
+            "column": 2,
+            "direction": "Up"
+        },
+        {
+            "row": 3,
+            "column": 3,
+            "direction": "Down"
+        },
+        {
+            "row": 4,
+            "column": 2,
+            "direction": "Down"
+        },
+        {
+            "row": 4,
+            "column": 3,
+            "direction": "Left"
+        }
+    ]
 }
