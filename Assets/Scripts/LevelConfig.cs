@@ -17,4 +17,12 @@ public class ArrowConfig
     public int row;
     public int column;
     public string direction;
+    public ArrowCellConfig[] body;
+}
+
+[Serializable]
+public class ArrowCellConfig
+{
+    public int row;
+    public int column;
 }
